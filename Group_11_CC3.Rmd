@@ -114,7 +114,13 @@ names(data3)
 Check `class()` of the `Date` column in each of the three objects. If any of them is `character`, convert it with `ymd()` from `lubridate` (Chapter 10, *date Objects*). All three must be the same class before you join, or the join will refuse to match them.
 
 ```{r fix-dates}
+class(data1$Date) #date
 
+class(data2$Date) #date
+
+class(data3$Date) #character
+data3$Date <- ymd(data3$Date)
+class(data3$Date) #date
 ```
 
 # Part 2 — Join the files
@@ -125,8 +131,11 @@ Combine the three objects into one called `all_data` with `full_join()` (Chapter
 
 ```{r full-join}
 
-# all_data <-
+most_data <- full_join(data1, data2, by = c("ID", "Date"))
 
+all_data <- full_join(most_data, data3, by = c("ID", "Date"))
+
+dim(all_data)
 ```
 
 ## 8. Compare the join verbs
@@ -136,18 +145,25 @@ Using only `data1` and `data2`, report the number of rows returned by `inner_joi
 ```{r compare-joins}
 
 # inner
+join_inside <- inner_join(data1, data2, by = c("ID", "Date"))
+nrow(join_inside)
 
 # left
+join_left <- left_join(data1, data2, by = c("ID", "Date"))
+nrow(join_left)
 
 # right
+join_right <- right_join(data1, data2, by = c("ID", "Date"))
+nrow(join_right)
 
 # full
-
+join_full <- full_join(data1, data2, by = c("ID", "Date"))
+nrow(join_full)
 ```
 
 **Question 3:** The four numbers differ. Explain which rows each verb keeps, and what that tells you about samples that are in one file but not the other.
 
-**Answer:**
+**Answer:** Inner join retains all rows that are common between data1 and data2 by the variables specificed. Left join retains all the rows from data1 and any matching rows from data2. Right join does the opposite, retaining all the rows from data2 and any matching rows from data1. Full join retains all columns from data1 and data2. By comparing the number of rows in each file, we can get an idea of how many samples are common between the two datasets when looking at the ID and date columns.
 
 # Part 3 — Dates, summaries and ordering
 
@@ -156,7 +172,10 @@ Using only `data1` and `data2`, report the number of rows returned by `inner_joi
 Add a `Year` column and a `Month` column to `all_data` with `mutate()` and the `lubridate` functions `year()` and `month()` (Chapter 10, *Extracting Components*).
 
 ```{r add-year}
-
+all_data <- all_data |>
+  mutate(Month = month(all_data$Date)) |>
+  mutate(Year = year(all_data$Date))
+View(all_data)
 ```
 
 ## 10. Summarise concentration by year
@@ -165,20 +184,29 @@ Use `group_by()` and `summarise()` (Chapter 10, *summarise() + group_by()*) to c
 
 ```{r year-summary}
 
-# year_summary <-
+grouped_alldata <- group_by(all_data, Year)
+year_summary <- summarise(
+  grouped_alldata,
+  Mean = mean(Conc, na.rm = TRUE),
+  SD = sd(Conc, na.rm = TRUE)
+)
 
+print(year_summary)
 ```
 
 **Question 4:** Does concentration differ between the two years? Answer in one or two sentences from the table.
 
-**Answer:**
+**Answer:** Yes, the mean concentration and standard deviation are significantly higher in 2021 compared to 2022. 
 
 ## 11. The five highest concentrations
 
 Use `arrange()` with `desc()` (Chapter 10, *arrange() Rows*) and `select()` (Chapter 10, *select() Columns*) to show the five samples with the highest `Conc`, with only the `ID`, `Year` and `Conc` columns. Pipe the steps together with `%>%` (Chapter 10, *%>%*).
 
 ```{r top-five}
-
+arranged_alldata <- all_data |>
+  select(ID, Year, Conc) |>
+  arrange(desc(Conc)) |>
+  head(5)
 ```
 
 # Part 4 — Reshape
@@ -189,14 +217,24 @@ Starting from `all_data`, the four measurement columns you renamed in Section 5 
 
 ```{r pivot-longer}
 
-# long_data <-
-
+long_data <- pivot_longer(
+  all_data,
+  cols = c("chem_PC1", "chem_PC2", "urine_PC1", "urine_PC2"),
+  names_to = "Measure",
+  values_to = "Score"
+)
+head(long_data)
+dim(long_data)
 ```
 
 Now use `long_data` to draw histograms of `Score` with `facet_wrap()` so that each `Measure` gets its own panel (Chapter 4 and Chapter 7). Choose a sensible `binwidth`, add axis labels and a title, and use `theme_classic()`.
 
 ```{r score-histograms}
-
+library(ggplot2)
+long_histogram <- ggplot(aes(x = Score), data = long_data) +
+  geom_histogram(bins = 25) +
+  facet_wrap("Measure") +
+  theme_classic()
 ```
 
 ## 13. Long to wide
@@ -205,13 +243,19 @@ Each `ID` was sampled once in each year. Starting from `all_data`, `select()` on
 
 ```{r pivot-wider}
 
-# wide_conc <-
+wide_conc <- all_data |>
+  select(ID, Year, Conc) |>
+  pivot_wider(names_from = "Year", values_from = "Conc")
 
+wide_conc <- mutate(wide_conc, Change = `2022` - `2021`)
+View(wide_conc)
+filter(wide_conc, Change > 0)
+filter(wide_conc, Change == "NA")
 ```
 
 **Question 5:** How many IDs have a higher concentration in the second year than in the first, and how many have `NA` for the change? Why are there NAs?
 
-**Answer:**
+**Answer:** There are 19 IDs
 
 # Part 5 — Test the hypothesis visually
 
